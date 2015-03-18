@@ -7,6 +7,8 @@
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
+
+#include <kernel/list.h>
   
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -30,6 +32,9 @@ static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 static void real_time_delay (int64_t num, int32_t denom);
 
+/* Put the thread into this list to sleep */
+struct list sleeping_list;
+
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
 void
@@ -37,6 +42,9 @@ timer_init (void)
 {
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+
+  /* Initilize the new added list. */
+  list_init (&sleeping_list);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -97,14 +105,20 @@ timer_sleep (int64_t ticks)
 
   ASSERT (intr_get_level () == INTR_ON); // make sure to keep this.
  
-  curr_thread = thread_current ();       // get the running thread.
-  curr_thread->sleep_ticks = ticks;      // put the sleep time into the data structure.
-  
   /* turn off the interrupt and block the thread. */
-  old_level = intr_disable (); 
-  thread_block(); // block the thread.
-  intr_set_level (old_level); 
+  old_level = intr_disable ();
 
+  curr_thread = thread_current (); // get the running thread.
+  curr_thread->wakeup_ticks = timer_ticks () + ticks;// put the sleep time into the data structure.
+
+  /* Inserts ELEM in the proper position in LIST, which must be
+    sorted according to LESS given auxiliary data AUX.
+    Runs in O(n) average case in the number of elements in LIST. */
+  list_insert_ordered (&sleeping_list, &curr_thread->elem,
+                    list_sleep_less, NULL);
+  thread_block(); // block the thread.
+
+  intr_set_level (old_level); 
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -162,7 +176,7 @@ timer_udelay (int64_t us)
 
    Busy waiting wastes CPU cycles, and busy waiting with
    interrupts off for the interval between timer ticks or longer
-   will cause timer ticks to be lost.  Thus, use timer_nsleep()
+   will cause timer ticks to be lost.  Thus, use timer_nsleep()f
    instead if interrupts are enabled.*/
 void
 timer_ndelay (int64_t ns) 
@@ -183,6 +197,23 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
   thread_tick ();
+  wakeup_thread();
+}
+
+void wakeup_thread()
+{
+  struct list_elem *front;
+  struct thread *curr;
+  /* Check and wake up sleeping threads. */
+  while (!list_empty(&sleeping_list))
+  {
+    front = list_front (&sleeping_list);
+    curr = list_entry (front, struct thread, elem);
+    if (curr->wakeup_ticks > ticks)
+      break;
+    list_remove (front);
+    thread_unblock (curr);
+  }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
