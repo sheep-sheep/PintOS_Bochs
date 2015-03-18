@@ -323,6 +323,8 @@ thread_yield (void)
   old_level = intr_disable ();
   if (cur != idle_thread) 
     /* list_push_back (&ready_list, &cur->elem);*/
+    /*Still need to consider here because the preemptive 
+      schedule has some problems.*/
     list_insert_ordered (&ready_list, &cur->elem, thread_priority_larger, NULL);
 
   cur->status = THREAD_READY;
