@@ -144,4 +144,8 @@ bool list_sleep_less(const struct list_elem *a,
                      const struct list_elem *b,
                      void *aux);
 
+bool thread_priority_larger(const struct list_elem *a,
+                           const struct list_elem *b,
+                           void *aux);
+
 #endif /* threads/thread.h */
