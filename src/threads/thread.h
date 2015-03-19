@@ -102,6 +102,8 @@ struct thread
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
+
+    int temp_priority;                  /* For comparison use. */
   };
 
 /* If false (default), use round-robin scheduler.

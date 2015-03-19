@@ -350,10 +350,28 @@ thread_foreach (thread_action_func *func, void *aux)
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
+/* Only update priority and test preemption if new priority
+  is smaller and current priority is not donated by another thread. 
+  There're 2 cases: 
+  (1) If the current thread's new priority has the same or higher value
+  then the front of ready queque, then nothing will happen to the running thread.
+  (2) If the current thread's new priority has smaller value, the thread_yield() 
+  will run to do preemptive operation. */
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  struct thread *t = thread_current ();
+  int old_priority = t->priority;  // For later comparison use.
+  /* Always update temp_priority for record. */
+  t->temp_priority = new_priority;
+  
+  // if (new_priority < old_priority && list_empty (&t->locks))
+  if (new_priority < old_priority)
+  {
+    t->priority = new_priority;      
+    // thread_test_preemption ();
+    thread_yield();
+  }
 }
 
 /* Returns the current thread's priority. */
