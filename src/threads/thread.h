@@ -94,6 +94,9 @@ struct thread
     struct list_elem elem;              /* List element. */
 
     int wakeup_ticks;                    /* Record the seelp interval. */
+    
+    struct list locks;                   /* Locks held for priority donation. */
+    struct lock *lock_waiting;          /* Lock waiting on for priority donation. */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -134,8 +137,13 @@ void thread_yield (void);
 typedef void thread_action_func (struct thread *t, void *aux);
 void thread_foreach (thread_action_func *, void *);
 
+// void thread_add_lock (struct lock *);
+// void thread_remove_lock (struct lock *);
+
 int thread_get_priority (void);
 void thread_set_priority (int);
+
+// void thread_update_priority (void);
 
 int thread_get_nice (void);
 void thread_set_nice (int);
@@ -149,5 +157,9 @@ bool list_sleep_less(const struct list_elem *a,
 bool thread_priority_larger(const struct list_elem *a,
                            const struct list_elem *b,
                            void *aux);
+
+bool lock_priority_larger(const struct list_elem *a,
+                      const struct list_elem *b,
+                      void *aux);
 
 #endif /* threads/thread.h */

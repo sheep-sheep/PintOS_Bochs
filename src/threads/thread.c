@@ -212,7 +212,14 @@ thread_create (const char *name, int priority,
   /* If the new created thread's priority is higher then the current one, 
     then the function could replace the current thread. Only run this when 
     initiate the thread. */
-  thread_yield();
+  // if (priority > thread_current ()->priority)
+  //   thread_yield();
+  // The problem is not here=====> want to fix priorit-fifo.  
+  enum intr_level old_level_test = intr_disable ();
+  if (!list_empty (&ready_list) && thread_current ()->priority < 
+      list_entry (list_front (&ready_list), struct thread, elem)->priority)
+    thread_yield ();
+  intr_set_level (old_level_test);
 
   return tid;
 }
@@ -357,20 +364,30 @@ thread_foreach (thread_action_func *func, void *aux)
   then the front of ready queque, then nothing will happen to the running thread.
   (2) If the current thread's new priority has smaller value, the thread_yield() 
   will run to do preemptive operation. */
+  /* Only update priority and test preemption if new priority
+    is smaller and current priority is not donated by another
+    thread. */
 void
 thread_set_priority (int new_priority) 
 {
   struct thread *t = thread_current ();
   int old_priority = t->priority;  // For later comparison use.
-  /* Always update temp_priority for record. */
+  /* Always update temp_priority for record, it may not update the priority immediately. */
   t->temp_priority = new_priority;
-  
-  // if (new_priority < old_priority && list_empty (&t->locks))
-  if (new_priority < old_priority)
+
+  // The new lower priority thread will be preempted by other threads in the ready_list.
+  if (new_priority < old_priority && list_empty (&t->locks))
+  // if (new_priority < old_priority)
   {
     t->priority = new_priority;      
     // thread_test_preemption ();
-    thread_yield();
+    enum intr_level old_level = intr_disable ();
+    /* Test if current thread should be preempted. */
+    if (!list_empty (&ready_list) && thread_current ()->priority < 
+         list_entry (list_front (&ready_list), struct thread, elem)->priority)
+      thread_yield ();
+    intr_set_level (old_level);
+    // thread_yield();
   }
 }
 
@@ -378,6 +395,7 @@ thread_set_priority (int new_priority)
 int
 thread_get_priority (void) 
 {
+  /*Remeber to implement when there're donations, to return the donation value. */
   return thread_current ()->priority;
 }
 
@@ -496,6 +514,10 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  // init for the new creat structure.
+  t->temp_priority = priority;
+  list_init (&t->locks);
+
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
 }
@@ -634,4 +656,76 @@ thread_priority_larger(const struct list_elem *a,
   struct thread *thread_a = list_entry (a, struct thread, elem);
   struct thread *thread_b = list_entry (b, struct thread, elem);
   return thread_a->priority > thread_b->priority;
+}
+
+void
+thread_test_preemption ()
+{
+  enum intr_level old_level = intr_disable ();
+  /* Test if current thread should be preempted. */
+  if (!list_empty (&ready_list) && thread_current ()->priority < 
+         list_entry (list_front (&ready_list), struct thread, elem)->priority)
+    thread_yield ();
+  intr_set_level (old_level);
+}
+
+void
+thread_add_lock (struct lock *lock)
+{
+  enum intr_level old_level = intr_disable ();
+  list_insert_ordered (&thread_current ()->locks, &lock->elem,
+                       lock_priority_larger, NULL);
+  /* Update priority and test preemption if lock's priority
+     is larger than current priority. */
+  if (lock->max_priority > thread_current ()->priority)
+  {
+    thread_current ()->priority = lock->max_priority;
+    thread_test_preemption ();
+  }
+  intr_set_level (old_level);
+}
+
+/* Remove a held lock from current thread. */
+void
+thread_remove_lock (struct lock *lock)
+{
+  enum intr_level old_level = intr_disable ();
+  /* Remove lock from list and update priority. */
+  list_remove (&lock->elem);
+  thread_update_priority (thread_current ());
+  intr_set_level (old_level);
+}
+
+/* Implement the compare func for the list_insert_ordered. This time we need to find out the larger one. */
+bool
+lock_priority_larger(const struct list_elem *a,
+                      const struct list_elem *b,
+                      void *aux UNUSED)
+{
+  struct thread *thread_a = list_entry (a, struct thread, elem);
+  struct thread *thread_b = list_entry (b, struct thread, elem);
+  return thread_a->priority > thread_b->priority;
+}
+
+/* This function is used to update the priority after the locak is released. It will
+  compare all the priority in the list, the results will icrease or lower the thread's 
+  priority. */
+void
+thread_update_priority (struct thread *t)
+{
+  enum intr_level old_level = intr_disable ();
+  int max_priority = t->temp_priority;
+  int lock_priority;
+
+  /* Get locks' max priority. */
+  if (!list_empty (&t->locks))
+  {
+    list_sort (&t->locks, lock_priority_larger, NULL);
+    lock_priority = list_entry (list_front (&t->locks),
+                    struct lock, elem)->max_priority;
+    if (lock_priority > max_priority)     
+      max_priority = lock_priority;
+  }
+  t->priority = max_priority;
+  intr_set_level (old_level);
 }
