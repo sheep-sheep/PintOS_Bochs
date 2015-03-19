@@ -518,6 +518,8 @@ init_thread (struct thread *t, const char *name, int priority)
   t->temp_priority = priority;
   list_init (&t->locks);
 
+  t->lock_waiting = NULL;
+
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
 }
@@ -696,17 +698,6 @@ thread_remove_lock (struct lock *lock)
   intr_set_level (old_level);
 }
 
-/* Implement the compare func for the list_insert_ordered. This time we need to find out the larger one. */
-bool
-lock_priority_larger(const struct list_elem *a,
-                      const struct list_elem *b,
-                      void *aux UNUSED)
-{
-  struct thread *thread_a = list_entry (a, struct thread, elem);
-  struct thread *thread_b = list_entry (b, struct thread, elem);
-  return thread_a->priority > thread_b->priority;
-}
-
 /* This function is used to update the priority after the locak is released. It will
   compare all the priority in the list, the results will icrease or lower the thread's 
   priority. */
@@ -727,5 +718,22 @@ thread_update_priority (struct thread *t)
       max_priority = lock_priority;
   }
   t->priority = max_priority;
+  intr_set_level (old_level);
+}
+
+/* Donate current thread's priority to another thread. */
+void
+thread_donate_priority (struct thread *t)
+{
+  // are we double disable the interrupt?
+  enum intr_level old_level = intr_disable ();
+  thread_update_priority (t);
+  /* If thread is in ready list, reorder it. */
+  if (t->status == THREAD_READY)
+  {
+    list_remove (&t->elem);
+    list_insert_ordered (&ready_list, &t->elem,
+      thread_priority_larger, NULL);
+  }
   intr_set_level (old_level);
 }

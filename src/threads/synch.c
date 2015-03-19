@@ -67,11 +67,11 @@ sema_down (struct semaphore *sema)
 
   old_level = intr_disable ();
   while (sema->value == 0) 
-    {
-      // list_push_back (&sema->waiters, &thread_current ()->elem);
-      list_insert_ordered(&sema->waiters,&thread_current()->elem, thread_priority_larger, NULL);
-      thread_block ();
-    }
+  {
+  // list_push_back (&sema->waiters, &thread_current ()->elem);
+    list_insert_ordered(&sema->waiters,&thread_current()->elem, thread_priority_larger, NULL);
+    thread_block ();
+  }
   sema->value--;
   intr_set_level (old_level);
 }
@@ -116,15 +116,14 @@ sema_up (struct semaphore *sema)
   old_level = intr_disable ();
   if (!list_empty (&sema->waiters)) {
     // add this line to preserve the order of the list.
+    /* My thought is if every elem is inserted by order, then we don't need to sort it again. */
     list_sort (&sema->waiters, thread_priority_larger, NULL);
     thread_unblock (list_entry (list_pop_front (&sema->waiters),
                                 struct thread, elem));
   }
-    
   sema->value++;
-
-  thread_yield();
-  
+  // thread_yield();
+  thread_test_preemption ();
   intr_set_level (old_level);
 }
 
@@ -200,12 +199,38 @@ lock_init (struct lock *lock)
 void
 lock_acquire (struct lock *lock)
 {
+  struct thread *curr = thread_current ();
+  struct lock *l_pt;
+  int depth = 0;
+  enum intr_level old_level;
+
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
+  if (lock->holder != NULL)  // Lock's held by other threads.
+  {
+    curr->lock_waiting = lock;  // Store the lock to the current thread.
+    l_pt = lock;
+
+    /* Nested Priority Donation. */
+    while (l_pt && curr->priority > l_pt->max_priority
+      && depth++ < PRIDON_MAX_DEPTH)
+    {
+      l_pt->max_priority = curr->priority;
+      thread_donate_priority (l_pt->holder);
+      l_pt = l_pt->holder->lock_waiting;
+    }
+  }
+  
   sema_down (&lock->semaphore);
-  lock->holder = thread_current ();
+  old_level = intr_disable ();
+  curr = thread_current ();
+  curr->lock_waiting = NULL;
+  lock->holder = curr;
+  lock->max_priority = curr->priority;
+  thread_add_lock (lock);
+  intr_set_level (old_level);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -239,6 +264,8 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
+  thread_remove_lock (lock);
+
   lock->holder = NULL;
   sema_up (&lock->semaphore);
 }
@@ -262,7 +289,7 @@ struct semaphore_elem
   };
 
 bool
-lock_priority_large (const struct list_elem *a,
+lock_priority_larger (const struct list_elem *a,
                      const struct list_elem *b,
                      void *aux UNUSED)
 {
