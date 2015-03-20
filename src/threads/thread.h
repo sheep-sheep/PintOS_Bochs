@@ -157,6 +157,11 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
+void thread_mlfqs_incr_recent_cpu(void);
+void thread_mlfqs_calc_recent_cpu(struct thread *);
+void thread_mlfqs_update_priority(struct thread *);
+void thread_mlfqs_refresh(void);
+
 bool list_sleep_less(const struct list_elem *a,
                      const struct list_elem *b,
                      void *aux);

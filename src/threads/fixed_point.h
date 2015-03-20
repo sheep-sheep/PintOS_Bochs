@@ -1,5 +1,5 @@
-#ifndef __FIXED_POINT_H
-#define __FIXED_POINT_H
+#ifndef THREADS_FIXED_POINT_H
+#define THREADS_FIXED_POINT_H
 
 /* Basic definitions of fixed point. */
 
@@ -18,10 +18,11 @@ Divide x by y:	((int64_t) x) * f / y
 Divide x by n:	x / n
 */
 typedef int fixed_t;
+
 #define FP_F (1 << 14)
 
 /* Convert n to fixed point:	n * f */
-#define FP_CONST(N) ((fixed_t)(N * FP_F)
+#define FP_CONST(N) ((fixed_t)(N * FP_F))
 /* Add x and y:	x + y */
 #define FP_ADD(X,Y) (X + Y)
 /* Add x and n:	x + n * f */
@@ -43,4 +44,4 @@ typedef int fixed_t;
 /* Convert x to integer (rounding to nearest) */
 #define FP_ROUND(X) (X >= 0 ? ((X + FP_F / 2) / FP_F) : ((X - FP_F / 2) / FP_F))
 
-#endif
+#endif  /* threads/fixed_point.h */
