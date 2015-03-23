@@ -208,7 +208,7 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
-  if (lock->holder != NULL)  // Lock's held by other threads.
+  if (lock->holder != NULL && !thread_mlfqs)  // Lock's held by other threads.
   {
     curr->lock_waiting = lock;  // Store the lock to the current thread.
     l_pt = lock;
@@ -226,10 +226,14 @@ lock_acquire (struct lock *lock)
   sema_down (&lock->semaphore);
   old_level = intr_disable ();
   curr = thread_current ();
-  curr->lock_waiting = NULL;
+  if (!thread_mlfqs)
+  {
+    curr->lock_waiting = NULL;
+    lock->max_priority = curr->priority;
+    thread_add_lock (lock);
+  }
+
   lock->holder = curr;
-  lock->max_priority = curr->priority;
-  thread_add_lock (lock);
   intr_set_level (old_level);
 }
 
@@ -263,9 +267,8 @@ lock_release (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
-
-  thread_remove_lock (lock);
-
+  if (!thread_mlfqs)
+    thread_remove_lock (lock);
   lock->holder = NULL;
   sema_up (&lock->semaphore);
 }
