@@ -210,6 +210,11 @@ memory is available.
 >> C1: Copy here the declaration of each new or changed `struct' or
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
+src/threads/thread.h
+	int nice;                           /* Niceness for BSD scheduler. */
+	fixed_t recent_cpu;                 /* Recent CPU for BSD scheduler. */
+src/threads/thread.c
+	fixed_t load_avg;		    /* Load average for BSD scheduling */
 
 ---- ALGORITHMS ----
 
@@ -221,23 +226,45 @@ memory is available.
 timer  recent_cpu    priority   thread
 ticks   A   B   C   A   B   C   to run
 -----  --  --  --  --  --  --   ------
- 0
- 4
- 8
-12
-16
-20
-24
-28
-32
-36
+ 0      0   0   0  63  61  59   A
+ 4      4   0   0  62  61  59   A
+ 8      8   0   0  61  61  59   B
+12      8   4   0  61  60  59   A
+16     12   4   0  60  60  59   B
+20     12   8   0  60  59  59   A
+24     16   8   0  59  59  59   C
+28     16   8   4  59  59  58   B
+32     16  12   4  59  58  58   A
+36     20  12   4  58  58  58   C
 
 >> C3: Did any ambiguities in the scheduler specification make values
 >> in the table uncertain?  If so, what rule did you use to resolve
 >> them?  Does this match the behavior of your scheduler?
+The ambiguity that makes values uncertain is that when 2 threads have the 
+same priority, the scheduluer doesn't know which thread to run first.
+
+The rule is to run the thread which isn't selected within the most nearest
+ticks. For example, when it comes to ticks 8 in above example, since A and B
+have the same priority but B doesn't run recently, B will become the next thread 
+to run.
+
+It matches the behavior of our scheduler becaue we're inserting the thread behind
+the existing thread when they have the same priorities. Thus no thread
+will dominate the system even though multiple threads have the same priority.
 
 >> C4: How is the way you divided the cost of scheduling between code
 >> inside and outside interrupt context likely to affect performance?
+We only update the priorities and recent_cpu when schedule is called which is
+approximately every four ticks instead of every tick thus avoiding some
+unnecessary calculations. 
+If we put too many steps inside the interrupt then it will has an issue like the doc
+in mlfqs_load_avg.c said:
+"  If the timer interrupt handler takes too
+   long, then the test's main thread will not have enough time to
+   do its own work (printing a message) and go back to sleep
+   before the next tick arrives.  Then the main thread will be
+   ready, instead of sleeping, when the tick arrives,
+   artificially driving up the load average."
 
 ---- RATIONALE ----
 
@@ -245,6 +272,18 @@ ticks   A   B   C   A   B   C   to run
 >> disadvantages in your design choices.  If you were to have extra
 >> time to work on this part of the project, how might you choose to
 >> refine or improve your design?
+Advantage:
+(1) We make full use of the original functions and the structure, thus 
+our implementation is clear in structure and has high stability;
+(2) The list to keep threads in our design is always sorted which make it
+very quick to select the next thread and keep the running order and follow 
+fair round robin rule.
+(3) We doesn't add too many variables and arguments and save the memory.
+
+Improvement:
+We need much more time to focus on the calculation of recent_cpu, its position 
+really does influence the performance of the tests. We should try different inside 
+and outside combinations.
 
 >> C6: The assignment explains arithmetic for fixed-point math in
 >> detail, but it leaves it open to you to implement it.  Why did you
@@ -252,6 +291,13 @@ ticks   A   B   C   A   B   C   to run
 >> abstraction layer for fixed-point math, that is, an abstract data
 >> type and/or a set of functions or macros to manipulate fixed-point
 >> numbers, why did you do so?  If not, why not?
+We implemented fixed-point.h file and in this file we define all the functions 
+it needs by definition. We do this to keep it more clear for users to use the fixed_point
+values and operations. 
+
+Also, it's very convient to change and update the function if the formula has changed or 
+we want to add some additional values. Doing so could increase the extensibility of the code.
+
 
 			   SURVEY QUESTIONS
 			   ================
@@ -264,15 +310,25 @@ the quarter.
 
 >> In your opinion, was this assignment, or any one of the three problems
 >> in it, too easy or too hard?  Did it take too long or too little time?
+It's a little hard, without any hint or reference, it's very hard to figure out
+an own design. Maybe you could provide more design suggestions or guides in the 
+following assignments.
 
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?
+Yes, especially the 2nd task, priority scheduling. I have a better understand of 
+the semaphore, lock and cond after I go through the code and try different implementations.
+
+The priority donation is very interesting and also important that I think everyone should work
+on it by himself or herself.
 
 >> Is there some particular fact or hint we should give students in
 >> future quarters to help them solve the problems?  Conversely, did you
 >> find any of our guidance to be misleading?
-
->> Do you have any suggestions for the TAs to more effectively assist
->> students, either for future quarters or the remaining projects?
+I think you should provide more detailed environment guide at the beginning of the lab. We've spent
+half of our time just trying to find a correct Linux version to run the virtual machine and install
+the Pintos. If we know more about the the env, we can spend much more time on the real problems.
 
 >> Any other comments?
+We want give special thank to Antons who gave us a lot of help. He replied the email quickly and gave
+us very specific solutions. He did a great job. Thanks to him, we can finish the project on time.
