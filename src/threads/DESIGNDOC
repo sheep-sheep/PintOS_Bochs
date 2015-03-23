@@ -108,33 +108,100 @@ function and maintain the original structure.
 >> B1: Copy here the declaration of each new or changed `struct' or
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
+src/threads/thread.h
+	#define PRIDON_MAX_DEPTH 9              /* Max depth of nested donation. */
+	struct list locks;                      /* Locks held for priority donation. */
+	struct lock *lock_waiting;              /* Lock waiting on for priority donation. */
+	int temp_priority;                      /* For priority comparison use. */
+
+src/threads/synch.h
+				 /* Change the structure of Lock. */
+     struct list_elem elem;      /* List element for priority donation. */
+     int max_priority;           /* Max priority for priority donation. */
 
 >> B2: Explain the data structure used to track priority donation.
 >> Use ASCII art to diagram a nested donation.  (Alternately, submit a
 >> .png file.)
+We create a new sorted list called "locks" to store the priority donations of 
+each thread. We also create lock add/remove functions to change the priority when
+the main calls lock_aquire() or lock_release(). We let the program to go through 
+all the locks list to check the donation relationship between different threads.
+As it traverses the list, it can update all the priorities in this donation list.
+
+Nested Donation Example:
+A, B, C are 3 threads, A is the main thread with the minmum priority 3, and it 
+aquires the lock first; then B, C are created and aquire the lock one by one, their
+priority are 6 and 9 respectively.
+A----priority->3
+  |--list->[A]
+  |--locker->L1
+
+Then B is created, it will update A's thread structure;
+A----priority->6 ----B----priority->6
+  |--list->[A]	        |--list->[B,A]
+  |--locker->NULL       |--locker->L1
+
+Then C is created, it will again update all the thread in locks list.
+A----priority->9 ----B----priority->9 ----C----priority->9
+  |--list->[A]	        |--list->[B,A]       |--list->[C,B,A]
+  |--locker->NULL       |--locker->L1        |--locker->L2
+
 
 ---- ALGORITHMS ----
 
 >> B3: How do you ensure that the highest priority thread waiting for
 >> a lock, semaphore, or condition variable wakes up first?
+In a semaphore or condition variable or a lock, we make sure waiters are inserted
+in a descending order by this function list_insert_ordered(). The front thread thus
+will have highest priority. We need to implement the comparison function for each
+insertion. 
 
 >> B4: Describe the sequence of events when a call to lock_acquire()
 >> causes a priority donation.  How is nested donation handled?
-
+1) Init the depth to 0;
+2) Check whether the lock is held by other threads;
+3) If there's other thread holds the lock:
+	store the lock to current thread;
+	Do a while loop with max iteration == 9;
+	In the loop, donate the current thread's priority to next thread;
+	Also update all the donation list(locks).
+4) Update the thread and lock information;
+5) Add lock to the thread;
+   
 >> B5: Describe the sequence of events when lock_release() is called
 >> on a lock that a higher-priority thread is waiting for.
+1) Remove the lock from locks list;
+2) Update the priority;
+3) Reorder the current thread's priority list;
+4) The lock holder is updated to NULL.
 
 ---- SYNCHRONIZATION ----
 
 >> B6: Describe a potential race in thread_set_priority() and explain
 >> how your implementation avoids it.  Can you use a lock to avoid
 >> this race?
+A possible race case is that when we're updating the priority of current
+thread, the interrupt handler is also manipulating the priority variable.The thread_set_priority 
+must determine whether or not to yield, which requires determining the current highest-priority 
+thread in the ready list. Doing so requires accessing the ready list, which is a shared structure.
+
+We could avoid this by turning off the interrupt during the thread_set_priority()
+function. We need to write and read the priority in interrupt handler which can't acquire
+locks, thus we can't use a lock to avoid the race.
 
 ---- RATIONALE ----
 
 >> B7: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
+Like what we did in the alarm-clock task, we tried to modify as little code as
+possible and maintain the original structure. Then we borrow the list structure from
+the lib and did the minmum change.
 
+Also, we could make sure the list is sorted after we insert one thread and we don't 
+need to sort them which is efficient.
+
+Last but not least, our implementation could make the nest donation as deep as possible, when the 
+memory is available.
 			  ADVANCED SCHEDULER
 			  ==================
 
