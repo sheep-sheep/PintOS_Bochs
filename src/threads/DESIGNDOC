@@ -8,18 +8,24 @@
 
 >> Fill in the names and email addresses of your group members.
 
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
-FirstName LastName <email@domain.example>
+Yang Zhang <zhang.yang.frank@gmail.com>
+Naixuan Ma <nm538@scarletmail.rutgers.edu>
+Tong Wang  <tony.wang0512@gmail.com>
 
 ---- PRELIMINARIES ----
 
 >> If you have any preliminary comments on your submission, notes for the
 >> TAs, or extra credit, please give them here.
 
->> Please cite any offline or online sources you consulted while
->> preparing your submission, other than the Pintos documentation, course
->> text, lecture notes, and course staff.
+>> Online sources:
+[1] http://zhangyangfrank.com/log-of-bochs-qemu-and-pintos-installation-on-ubuntu-14-04/
+[2] http://spsneo.com/blog/2008/08/03/how-to-install-pintos-on-qemu/
+[3] https://tssurya.wordpress.com/2014/10/25/priority-scheduling-inversion-and-donation/
+[4] https://pintosiiith.wordpress.com/category/pintos/
+[5] https://github.com/microdog/pintos-project-1
+[6] https://github.com/ryantimwilson/Pintos-Project-1
+[7] https://github.com/andrei-alpha/pintos/commit/f632b1e1de37074246a25b6784a2dfb8bb826863
+
 
 			     ALARM CLOCK
 			     ===========
@@ -30,13 +36,44 @@ FirstName LastName <email@domain.example>
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+src/devices/timer.c
+	struct list sleeping_list;	/* Put the thread into this list 
+					   to sleep */
+src/threads/thread.h
+	int wakeup_ticks;               /* Record the sleep interval or when 
+					   the thread is ready to be unblocked */
+
 ---- ALGORITHMS ----
 
 >> A2: Briefly describe what happens in a call to timer_sleep(),
 >> including the effects of the timer interrupt handler.
 
+In timer_sleep():
+1) Turn off the interrupt.
+2) Get the current running thread.
+3) Calculate the wake up time for this thread by adding the ticks argument 
+to the current ticks(since the OS boots) and store it to the new created 
+variable wakeup_ticks.
+4) Use the list_insert_ordered() function to add the thread into sleeping_list by 
+decending order, we need to provide an LESS function. The soon to be ran thread will
+stay in front of the list.
+5) Block the thread.
+6) Turn on the interrrupt.
+
+In the timer interrupt handler:
+We developed a function called wakeup_thread():
+1) Check whether the sleeping_list is empty or not, if it's empty, there's nothing to
+wake up, if it's not, we will proceed to the next step.
+2) Get the frontest thread in the sleeping_list.
+3) Check the thread's tick with global one(compare the time). If the thread's ticks 
+value <= the OS ticks, the thread is removed from the sleeping_list and unblocked, 
+if it's not, finish the check and continue the CPU task.
+
 >> A3: What steps are taken to minimize the amount of time spent in
 >> the timer interrupt handler?
+We keep threads sorted in the sleeping_list when we do the insertion. Thus every time 
+the handler doesn't go through the whole list to find out which thread to be unblocked, 
+which minimize the amount of time spent in the handler.
 
 ---- SYNCHRONIZATION ----
 
@@ -45,11 +82,23 @@ FirstName LastName <email@domain.example>
 
 >> A5: How are race conditions avoided when a timer interrupt occurs
 >> during a call to timer_sleep()?
+We solve the 2 problems above both by disabling the interrupt in step 1). Since the 
+sleeping_list is a kernel structure, the other threads won't touch it during the 
+interrupt.This will make sure threads are using this function sequentially. Race 
+conditions can also be avoided.
 
 ---- RATIONALE ----
 
 >> A6: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
+We try to implement the functions based on the orignal function of Pintos. We have tried
+to add a new state called SLEEPING, and then changed threads state. However, it made code
+much more messy and since there's a structure called ready list, we imitate it and have 
+another list to keep sleeping thread.  
+
+When it comes to sorting the list, we go through all the exsiting functions and find 
+list_insert_ordered() which makes the code clean and neat. We tried our best to implement the
+function and maintain the original structure.
 
 			 PRIORITY SCHEDULING
 			 ===================
