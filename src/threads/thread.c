@@ -221,8 +221,6 @@ thread_create (const char *name, int priority,
   /* If the new created thread's priority is higher then the current one, 
     then the function could replace the current thread. Only run this when 
     initiate the thread. */
-  // if (priority > thread_current ()->priority)
-  //   thread_yield();
   // The problem is not here=====> want to fix priorit-fifo.  
   enum intr_level old_level_test = intr_disable ();
   if (!list_empty (&ready_list) && thread_current ()->priority < 
@@ -266,7 +264,6 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  //list_push_back (&ready_list, &t->elem);
   list_insert_ordered (&ready_list, &t->elem, thread_priority_larger, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
@@ -389,17 +386,15 @@ thread_set_priority (int new_priority)
 
   // The new lower priority thread will be preempted by other threads in the ready_list.
   if (new_priority < old_priority && list_empty (&t->locks))
-  // if (new_priority < old_priority)
   {
     t->priority = new_priority;      
-    // thread_test_preemption ();
+
     enum intr_level old_level = intr_disable ();
     /* Test if current thread should be preempted. */
     if (!list_empty (&ready_list) && thread_current ()->priority < 
          list_entry (list_front (&ready_list), struct thread, elem)->priority)
       thread_yield ();
     intr_set_level (old_level);
-    // thread_yield();
   }
 }
 
@@ -815,6 +810,7 @@ thread_mlfqs_refresh()
   /* load_avg = (59/60)*load_avg + (1/60)*ready_threads. */
   load_avg = FP_ADD(FP_DIV_MIX(FP_MULT_MIX(load_avg, 59), 60),
                      FP_DIV_MIX(FP_CONST(ready_threads), 60));
+
   /* recent_cpu is recalculated for every thread per second. */
   struct thread *t;
   struct list_elem *e = list_begin (&all_list);

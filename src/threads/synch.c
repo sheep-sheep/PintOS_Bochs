@@ -110,7 +110,6 @@ void
 sema_up (struct semaphore *sema) 
 {
   enum intr_level old_level;
-
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
@@ -122,7 +121,6 @@ sema_up (struct semaphore *sema)
                                 struct thread, elem));
   }
   sema->value++;
-  // thread_yield();
   thread_test_preemption ();
   intr_set_level (old_level);
 }
@@ -214,8 +212,7 @@ lock_acquire (struct lock *lock)
     l_pt = lock;
 
     /* Nested Priority Donation. */
-    while (l_pt && curr->priority > l_pt->max_priority
-      && depth++ < PRIDON_MAX_DEPTH)
+    while (l_pt && curr->priority > l_pt->max_priority && depth++ < PRIDON_MAX_DEPTH)
     {
       l_pt->max_priority = curr->priority;
       thread_donate_priority (l_pt->holder);
