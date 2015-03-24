@@ -796,6 +796,18 @@ thread_mlfqs_update_priority(struct thread *t)
     t->priority = PRI_MAX;
 }
 
+void
+thread_mlfqs_calc_load_avg()
+{
+    /* Calculate load_avg per second. */
+  size_t ready_threads = list_size (&ready_list);
+  if (thread_current () != idle_thread)
+    ready_threads++;
+  /* load_avg = (59/60)*load_avg + (1/60)*ready_threads. */
+  load_avg = FP_ADD(FP_DIV_MIX(FP_MULT_MIX(load_avg, 59), 60),
+                     FP_DIV_MIX(FP_CONST(ready_threads), 60));
+}
+
 /* Invoked once per second to refresh load_avg and recent_cpu of all threads. */
 void
 thread_mlfqs_refresh()
@@ -803,13 +815,7 @@ thread_mlfqs_refresh()
   ASSERT (thread_mlfqs);
   ASSERT (intr_context ());
 
-  /* Calculate load_avg per second. */
-  size_t ready_threads = list_size (&ready_list);
-  if (thread_current () != idle_thread)
-    ready_threads++;
-  /* load_avg = (59/60)*load_avg + (1/60)*ready_threads. */
-  load_avg = FP_ADD(FP_DIV_MIX(FP_MULT_MIX(load_avg, 59), 60),
-                     FP_DIV_MIX(FP_CONST(ready_threads), 60));
+  thread_mlfqs_calc_load_avg();
 
   /* recent_cpu is recalculated for every thread per second. */
   struct thread *t;
